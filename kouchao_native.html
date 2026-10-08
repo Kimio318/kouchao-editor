@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>口播自动剪辑器（本地原生版）</title>
+<style>
+  :root{ --brand:#2b6cff; --brand2:#1b4fd6; --line:#e3e8f0; --bg:#f6f8fc; --card:#fff; --text:#1f2733; --muted:#6b7686; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+  .wrap{max-width:880px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  .ffstatus{font-size:13px;padding:6px 10px;border-radius:8px;display:inline-block;margin-bottom:12px}
+  .ok{background:#e7f7ee;color:#0a7a3f;border:1px solid #b7e6c9}
+  .bad{background:#fdeaea;color:#c0392b;border:1px solid #f3c2c0}
+  label{font-size:13px;font-weight:600;display:block;margin:12px 0 4px}
+  .hint{font-size:12px;color:var(--muted);font-weight:400}
+  input[type=text],input[type=file]{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:180px}
+  .slider{display:flex;align-items:center;gap:10px}
+  .slider input[type=range]{flex:1}
+  .slider .val{font-variant-numeric:tabular-nums;min-width:62px;text-align:right;font-size:13px;color:var(--brand2)}
+  button{background:var(--brand);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
+  button:hover{background:var(--brand2)}
+  button:disabled{background:#b9c4d6;cursor:not-allowed}
+  button.ghost{background:#eef2f9;color:var(--brand2)}
+  .drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--muted);cursor:pointer;font-size:13px}
+  .drop:hover{border-color:var(--brand)}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;font-variant-numeric:tabular-nums}
+  th{color:var(--muted);font-weight:600}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0}
+  .stat{background:#f3f7ff;border:1px solid #dbe6ff;border-radius:10px;padding:10px 14px;min-width:110px}
+  .stat .k{font-size:12px;color:var(--muted)}
+  .stat .v{font-size:20px;font-weight:700;color:var(--brand2)}
+  .log{background:#0f1622;color:#cfe3ff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;padding:12px;border-radius:10px;height:180px;overflow:auto;white-space:pre-wrap;margin-top:8px}
+  a.dl{display:inline-block;margin-top:10px;background:#0a7a3f;color:#fff;padding:10px 16px;border-radius:9px;text-decoration:none;font-weight:600}
+  .hide{display:none}
+  .badge{font-size:12px;padding:3px 9px;border-radius:6px;background:#eef2f9;color:var(--muted)}
+  .badge.warn{background:#fff4e0;color:#a05a00}
+  .badge.ok{background:#e7f7ee;color:#0a7a3f}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎬 口播自动剪辑器 <span style="font-size:13px;color:var(--muted);font-weight:400">本地原生版</span></h1>
+  <div class="sub">调用你本机的 ffmpeg.exe 去静音/长停顿 · 视频不出本机 · 支持大文件</div>
+
+  <div class="card">
+    <div id="ffStatus" class="ffstatus bad">检测 ffmpeg 中…</div>
+
+    <label>① 选视频（二选一）</label>
+    <div class="drop" id="drop">把视频拖到这里，或点此选择文件</div>
+    <input type="file" id="file" class="hide" accept="video/*">
+    <div class="hint" style="margin-top:8px">大文件（如 534MB）建议直接粘贴本地路径，免上传：</div>
+    <input type="text" id="path" placeholder="例如  E:\口播测试\260806.mp4" style="margin-top:6px">
+
+    <label>② 参数</label>
+    <div class="row">
+      <div>
+        <div class="slider"><span class="hint">静音阈值</span><input type="range" id="thr" min="-60" max="-10" step="1" value="-28"><span class="val" id="thrV">-28 dB</span></div>
+        <div class="hint">阈值越高（越接近 0）切得越多；带背景音的口播用 -25~-28，纯人声用 -35~-40</div>
+      </div>
+      <div>
+        <div class="slider"><span class="hint">最小剪切停顿</span><input type="range" id="min" min="0.1" max="3" step="0.1" value="0.4"><span class="val" id="minV">0.40 s</span></div>
+        <div class="hint">超过该时长的静音才剪</div>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="slider"><span class="hint">边缘留白</span><input type="range" id="pad" min="0" max="1" step="0.05" value="0.1"><span class="val" id="padV">0.10 s</span></div>
+        <div class="hint">每段前后留点，防切掉字头</div>
+      </div>
+      <div>
+        <div class="slider"><span class="hint">最短保留</span><input type="range" id="minSeg" min="0.1" max="2" step="0.1" value="0.3"><span class="val" id="minSegV">0.30 s</span></div>
+        <div class="hint">滤掉过短的杂声片段</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button id="analyze">🔍 分析</button>
+      <button id="cut" class="ghost" disabled>✂️ 开始剪辑</button>
+      <span id="stage" class="badge">待分析</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>③ 语气词切除（可选 · 需要语音识别）</label>
+    <div id="asrStatus" class="ffstatus bad">检测 whisper 中…</div>
+    <div class="row" style="align-items:center">
+      <div style="flex:0 0 auto">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin:0">
+          <input type="checkbox" id="filler" style="width:auto"> 启用语气词切除
+        </label>
+      </div>
+      <div>
+        <span class="hint">识别语言</span>
+        <select id="lang" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+          <option value="auto">自动</option>
+          <option value="zh" selected>中文</option>
+          <option value="en">英文</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:8px">要切除的语气词（逗号分隔，可自定义）：</div>
+    <input type="text" id="fillerWords" value="嗯,啊,呃,额,恩,那个,这个,就是说,那么,嗯嗯,啊啊" style="margin-top:6px">
+    <div class="hint" style="margin-top:6px">开启后会在「静音切除」之外，额外切掉这些词出现的区间。识别由你本机的 whisper.cpp 完成，视频不出本机。</div>
+  </div>
+
+  <div class="card hide" id="resultCard">
+    <div class="stats">
+      <div class="stat"><div class="k">原时长</div><div class="v" id="oDur">—</div></div>
+      <div class="stat"><div class="k">剪辑后</div><div class="v" id="cDur">—</div></div>
+      <div class="stat"><div class="k">省去</div><div class="v" id="saved">—</div></div>
+      <div class="stat"><div class="k">保留段数</div><div class="v" id="segN">—</div></div>
+    </div>
+    <div id="segTable"><table><thead><tr><th>#</th><th>起(s)</th><th>止(s)</th><th>时长(s)</th></tr></thead><tbody id="segBody"></tbody></table></div>
+    <div id="fillerBox" class="hide" style="margin-top:14px">
+      <div class="badge ok" id="fillerBadge">识别到 0 个语气词</div>
+      <div id="fillerTable" style="margin-top:8px"><table><thead><tr><th>语气词</th><th>起(s)</th><th>止(s)</th></tr></thead><tbody id="fillerBody"></tbody></table></div>
+    </div>
+    <a id="download" class="dl hide" download="kouchao_cut.mp4">⬇️ 下载剪辑结果 (kouchao_cut.mp4)</a>
+  </div>
+
+  <div class="card">
+    <label>运行日志</label>
+    <div id="log" class="log"></div>
+  </div>
+
+  <div class="card">
+    <label>语气词切除 · 需要 whisper 语音识别</label>
+    <div class="hint" style="line-height:1.8">
+      该功能先把语音转成带时间戳的文字，再切掉「嗯/啊/那个」等区间。<b>全程本地、视频不出本机</b>。
+      <br>① 下载 <b>whisper-cli.exe</b>（win64 版）：来自
+      <span style="color:var(--brand2)">github.com/ggerganov/whisper.cpp/releases</span>（找含 <code>whisper-cli</code> 的压缩包）
+      <br>② 下载模型 <b>ggml-base.bin</b>（约 140MB，中文口播够用；要更准换 ggml-small.bin）：
+      <span style="color:var(--brand2)">huggingface.co/ggerganov/whisper.cpp</span>
+      <br>③ 放好位置（二选一，重启本服务后生效）：
+      <br>&nbsp;&nbsp;• <code>E:\口播测试\whisper\whisper-cli.exe</code> + <code>E:\口播测试\whisper\models\ggml-base.bin</code>
+      <br>&nbsp;&nbsp;• 或设环境变量 <code>WHISPER_BIN</code> / <code>WHISPER_MODEL</code> 指向它们
+      <br>④ 重启服务：到本目录运行 <code>CUT_PORT=8021 python cut_server.py</code>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let SERVER = '';
+try { SERVER = localStorage.getItem('kcc_server') || ''; } catch(e){}
+function setServer(addr){
+  SERVER = addr.replace(/\/+$/, '');
+  try { localStorage.setItem('kcc_server', SERVER); } catch(e){}
+  location.reload();
+}
+function showConnBar(){
+  if(document.getElementById('connBar')) return;
+  if(SERVER==='' && location.hostname!=='127.0.0.1'){ setServer('http://127.0.0.1:8021'); return; }
+  const bar = document.createElement('div');
+  bar.id = 'connBar';
+  bar.style.cssText = 'position:sticky;top:0;z-index:99;background:#fff3f3;border-bottom:2px solid #ff6b6b;color:#a11;padding:12px 16px;font-size:13px;line-height:1.7';
+  const msg = document.createElement('span');
+  msg.textContent = '⚠️ 无法连接剪辑服务器。请在本机浏览器地址栏直接打开 http://127.0.0.1:8021/ （不要用聊天预览面板，也不要双击 html 文件）。若端口不同，填地址后点应用：';
+  const inp = document.createElement('input');
+  inp.id = 'srvInput'; inp.value = 'http://127.0.0.1:8021';
+  inp.style.cssText = 'width:210px;padding:4px 6px;margin:0 6px;border:1px solid #f99;border-radius:6px';
+  const btn = document.createElement('button');
+  btn.textContent = '应用';
+  btn.style.cssText = 'padding:4px 12px;border:0;border-radius:6px;background:#ff6b6b;color:#fff;cursor:pointer';
+  btn.addEventListener('click', () => setServer(document.getElementById('srvInput').value));
+  bar.appendChild(msg); bar.appendChild(inp); bar.appendChild(btn);
+  document.body.insertBefore(bar, document.body.firstChild);
+}
+let pickedFile = null;
+let lastSegs = [];
+
+['thr','min','pad','minSeg'].forEach(k=>{
+  const map={thr:['thrV',v=>v+' dB'],min:['minV',v=>(+v).toFixed(2)+' s'],pad:['padV',v=>(+v).toFixed(2)+' s'],minSeg:['minSegV',v=>(+v).toFixed(2)+' s']};
+  $(k).oninput=e=>{ const [el,fmt]=map[k]; $(el).textContent=fmt(e.target.value); };
+});
+
+function log(s){ const el=$('log'); el.textContent += s+"\n"; el.scrollTop=el.scrollHeight; }
+function setStage(t,c){ const e=$('stage'); e.textContent=t; e.className='badge'+(c?(' '+c):''); }
+
+$('drop').onclick=()=>$('file').click();
+$('file').onchange=e=>{ if(e.target.files[0]){ pickedFile=e.target.files[0]; $('path').value=''; log('已选择文件：'+pickedFile.name); } };
+['dragover','dragenter'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='var(--brand)';}));
+['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='var(--line)';}));
+$('drop').addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f){ pickedFile=f; $('path').value=''; log('已拖入：'+f.name);} });
+$('path').oninput=()=>{ pickedFile=null; };
+
+async function analyze(){
+  if(!pickedFile && !$('path').value.trim()){ log('请先选视频或填写本地路径'); return; }
+  $('analyze').disabled=true; setStage('分析中…','warn');
+  try{
+    let body, headers={};
+    if(pickedFile){
+      body=await pickedFile.arrayBuffer();
+      headers={'Content-Type':'application/octet-stream','X-Params':JSON.stringify(params())};
+    } else {
+      body=JSON.stringify({path:$('path').value.trim(), ...params()});
+      headers={'Content-Type':'application/json'};
+    }
+    const r=await fetch(SERVER + '/api/analyze',{method:'POST',body,headers});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'分析失败');
+    lastSegs=j.segments;
+    renderResult(j);
+    setStage('可剪辑','ok'); $('cut').disabled=false;
+  }catch(err){ log('❌ '+err.message); setStage('分析失败'); }
+  finally{ $('analyze').disabled=false; }
+}
+
+function params(){ return {thr:+$('thr').value, min:+$('min').value, pad:+$('pad').value, minSeg:+$('minSeg').value,
+  filler:$('filler').checked, lang:$('lang').value, fillerWords:$('fillerWords').value}; }
+
+function fmt(s){ s=Math.max(0,s); const m=Math.floor(s/60), ss=(s%60); return (m>0? m+':'+ss.toFixed(2).padStart(5,'0') : ss.toFixed(2)); }
+
+function renderResult(j){
+  $('resultCard').classList.remove('hide');
+  $('oDur').textContent=fmt(j.origDur);
+  const cut=j.segments.reduce((a,[s,e])=>a+(e-s),0);
+  $('cDur').textContent=fmt(cut);
+  $('saved').textContent=j.origDur? Math.round((1-cut/j.origDur)*100)+'%':'—';
+  $('segN').textContent=j.segments.length;
+  const tb=$('segBody'); tb.innerHTML='';
+  j.segments.slice(0,200).forEach(([s,e],k)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${k+1}</td><td>${s.toFixed(2)}</td><td>${e.toFixed(2)}</td><td>${(e-s).toFixed(2)}</td>`; tb.appendChild(tr); });
+  // 语气词
+  if(j.filler && j.fillers){
+    $('fillerBox').classList.remove('hide');
+    $('fillerBadge').textContent='识别到 '+j.fillerCount+' 个语气词（将被切除）';
+    const fb=$('fillerBody'); fb.innerHTML='';
+    j.fillers.slice(0,200).forEach(({word,start,end})=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${word}</td><td>${start.toFixed(2)}</td><td>${end.toFixed(2)}</td>`; fb.appendChild(tr); });
+  } else {
+    $('fillerBox').classList.add('hide');
+  }
+  let msg=`✅ 分析完成：保留 ${j.segments.length} 段，预计时长 ${fmt(cut)}，省去 ${$('saved').textContent}`;
+  if(j.filler) msg+=`；语气词 ${j.fillerCount||0} 个`;
+  log(msg);
+}
+
+$('analyze').onclick=analyze;
+
+$('cut').onclick=async()=>{
+  if(!lastSegs.length){ log('没有可保留片段'); return; }
+  $('cut').disabled=true; setStage('剪辑中…','warn');
+  try{
+    let body, headers={};
+    if(pickedFile){
+      body=await pickedFile.arrayBuffer();
+      headers={'Content-Type':'application/octet-stream','X-Params':JSON.stringify({...params(),segments:lastSegs})};
+    } else {
+      body=JSON.stringify({path:$('path').value.trim(), ...params(), segments:lastSegs});
+      headers={'Content-Type':'application/json'};
+    }
+    const r=await fetch(SERVER + '/api/cut',{method:'POST',body,headers});
+    if(!r.ok){ const t=await r.text(); throw new Error(t||'剪辑失败'); }
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=$('download'); a.href=url; a.classList.remove('hide');
+    log('✅ 剪辑完成！点击上方链接下载。');
+    setStage('完成','ok');
+  }catch(err){ log('❌ '+err.message); setStage('剪辑失败'); }
+  finally{ $('cut').disabled=false; }
+};
+
+// 启动检测 ffmpeg 与 whisper
+(async()=>{
+  try{
+    const r=await fetch(SERVER + '/api/ffmpeg'); const j=await r.json();
+    const el=$('ffStatus');
+    if(j.ok){ el.className='ffstatus ok'; el.textContent='✅ ffmpeg 就绪：'+j.bin; }
+    else { el.className='ffstatus bad'; el.textContent='❌ 未找到 ffmpeg：'+j.error; }
+  }catch(e){ $('ffStatus').textContent='无法连接服务器'; showConnBar(); }
+  try{
+    const r=await fetch(SERVER + '/api/asr-status'); const j=await r.json();
+    const el=$('asrStatus');
+    if(j.whisper && j.model){
+      el.className='ffstatus ok'; el.textContent='✅ 语音识别就绪：'+j.modelName;
+    } else if(j.whisper && !j.model){
+      el.className='ffstatus bad'; el.textContent='⚠️ 找到 whisper 但缺模型，请把 ggml-*.bin 放到 E:\\口播测试\\whisper\\models\\';
+    } else {
+      el.className='ffstatus bad'; el.textContent='❌ 未找到 whisper：需下载 whisper-cli.exe 与模型（见下方说明）';
+    }
+  }catch(e){ $('asrStatus').textContent='无法连接服务器'; showConnBar(); }
+})();
+</script>
+</body>
+</html>

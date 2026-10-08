@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>口播自动剪辑器（本地原生版）</title>
+<style>
+  :root{ --brand:#2b6cff; --brand2:#1b4fd6; --line:#e3e8f0; --bg:#f6f8fc; --card:#fff; --text:#1f2733; --muted:#6b7686; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+  .wrap{max-width:880px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  .ffstatus{font-size:13px;padding:6px 10px;border-radius:8px;display:inline-block;margin-bottom:12px}
+  .ok{background:#e7f7ee;color:#0a7a3f;border:1px solid #b7e6c9}
+  .bad{background:#fdeaea;color:#c0392b;border:1px solid #f3c2c0}
+  label{font-size:13px;font-weight:600;display:block;margin:12px 0 4px}
+  .hint{font-size:12px;color:var(--muted);font-weight:400}
+  input[type=text],input[type=file]{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:180px}
+  .slider{display:flex;align-items:center;gap:10px}
+  .slider input[type=range]{flex:1}
+  .slider .val{font-variant-numeric:tabular-nums;min-width:62px;text-align:right;font-size:13px;color:var(--brand2)}
+  button{background:var(--brand);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
+  button:hover{background:var(--brand2)}
+  button:disabled{background:#b9c4d6;cursor:not-allowed}
+  button.ghost{background:#eef2f9;color:var(--brand2)}
+  .drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--muted);cursor:pointer;font-size:13px}
+  .drop:hover{border-color:var(--brand)}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;font-variant-numeric:tabular-nums}
+  th{color:var(--muted);font-weight:600}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0}
+  .stat{background:#f3f7ff;border:1px solid #dbe6ff;border-radius:10px;padding:10px 14px;min-width:110px}
+  .stat .k{font-size:12px;color:var(--muted)}
+  .stat .v{font-size:20px;font-weight:700;color:var(--brand2)}
+  .log{background:#0f1622;color:#cfe3ff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;padding:12px;border-radius:10px;height:180px;overflow:auto;white-space:pre-wrap;margin-top:8px}
+  a.dl{display:inline-block;margin-top:10px;background:#0a7a3f;color:#fff;padding:10px 16px;border-radius:9px;text-decoration:none;font-weight:600}
+  .hide{display:none}
+  .badge{font-size:12px;padding:3px 9px;border-radius:6px;background:#eef2f9;color:var(--muted)}
+  .badge.warn{background:#fff4e0;color:#a05a00}
+  .badge.ok{background:#e7f7ee;color:#0a7a3f}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎬 口播自动剪辑器 <span style="font-size:13px;color:var(--muted);font-weight:400">本地原生版</span></h1>
+  <div class="sub">调用你本机的 ffmpeg.exe 去静音/长停顿 · 视频不出本机 · 支持大文件</div>
+
+  <div class="card">
+    <div id="ffStatus" class="ffstatus bad">检测 ffmpeg 中…</div>
+
+    <label>① 选视频（二选一）</label>
+    <div class="drop" id="drop">把视频拖到这里，或点此选择文件</div>
+    <input type="file" id="file" class="hide" accept="video/*">
+    <div class="hint" style="margin-top:8px">大文件（如 534MB）建议直接粘贴本地路径，免上传：</div>
+    <input type="text" id="path" placeholder="例如  E:\口播测试\260806.mp4" style="margin-top:6px">
+
+    <label>② 参数</label>
+    <div class="row">
+      <div>
+        <div class="slider"><span class="hint">静音阈值</span><input type="range" id="thr" min="-60" max="-10" step="1" value="-28"><span class="val" id="thrV">-28 dB</span></div>
+        <div class="hint">阈值越高（越接近 0）切得越多；带背景音的口播用 -25~-28，纯人声用 -35~-40</div>
+      </div>
+      <div>
+        <div class="slider"><span class="hint">最小剪切停顿</span><input type="range" id="min" min="0.1" max="3" step="0.1" value="0.4"><span class="val" id="minV">0.40 s</span></div>
+        <div class="hint">超过该时长的静音才剪</div>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="slider"><span class="hint">边缘留白</span><input type="range" id="pad" min="0" max="1" step="0.05" value="0.1"><span class="val" id="padV">0.10 s</span></div>
+        <div class="hint">每段前后留点，防切掉字头</div>
+      </div>
+      <div>
+        <div class="slider"><span class="hint">最短保留</span><input type="range" id="minSeg" min="0.1" max="2" step="0.1" value="0.3"><span class="val" id="minSegV">0.30 s</span></div>
+        <div class="hint">滤掉过短的杂声片段</div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <div>
+        <span class="hint">停顿处理</span>
+        <select id="pauseMode" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+          <option value="cut" selected>切除（直接去静音）</option>
+          <option value="compress">压缩（保留喘息感）</option>
+        </select>
+        <div class="hint">压缩：把长停顿压到固定短间隙，保留自然呼吸；切除：直接去掉静音</div>
+      </div>
+      <div>
+        <div class="slider"><span class="hint">压缩后间隙</span><input type="range" id="floorGap" min="0.1" max="1" step="0.05" value="0.25"><span class="val" id="floorGapV">0.25 s</span></div>
+        <div class="hint">仅“压缩”模式生效：保留的最短停顿长度</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button id="analyze">🔍 分析</button>
+      <button id="cut" class="ghost" disabled>✂️ 开始剪辑</button>
+      <span id="stage" class="badge">待分析</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>③ 语气词切除（可选 · 需要语音识别）</label>
+    <div id="asrStatus" class="ffstatus bad">检测 whisper 中…</div>
+    <div id="modelWarn" class="hide" style="font-size:13px;line-height:1.7;padding:8px 11px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;margin-bottom:12px"></div>
+    <div class="row" style="align-items:center">
+      <div style="flex:0 0 auto">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin:0">
+          <input type="checkbox" id="filler" style="width:auto"> 启用语气词切除
+        </label>
+      </div>
+      <div>
+        <span class="hint">识别语言</span>
+        <select id="lang" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+          <option value="auto">自动</option>
+          <option value="zh" selected>中文（普通话）</option>
+          <option value="yue">粤语</option>
+          <option value="en">英文</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="align-items:center;margin-top:10px">
+      <div>
+        <span class="hint">识别处理方式</span>
+        <select id="gpuMode" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+          <option value="gpu" selected>CPU + GPU 处理（有显卡则加速）</option>
+          <option value="cpu">仅用 CPU 处理</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint" style="margin-top:6px">选「CPU+GPU」时，若 whisper 支持 GPU 会用显卡加速；当前内置 whisper 为纯 CPU 版，该选项会回退到 CPU。</div>
+    <div class="hint" style="margin-top:8px">安全级语气词（始终切除，属无意义犹豫音）：</div>
+    <input type="text" id="fillerWords" value="um,uh,er,ah,呃,额" style="margin-top:6px">
+    <div class="hint" style="margin-top:6px">语境级语气词（仅贴近停顿边界时切除，避免误伤连接/顺序词）：</div>
+    <input type="text" id="fillerWords2" value="然后,就是,嗯,啊,那个,那,对,所以,但是" style="margin-top:6px">
+    <div class="hint" style="margin-top:6px">开启后会在「静音切除」之外，额外切掉这些词出现的区间；切点会吸附到最近的停顿边界，不切在发音中途。识别由本机 whisper.cpp 完成，视频不出本机。</div>
+    <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin:0">
+        <input type="checkbox" id="sliceMode" style="width:auto"> 启用自然切片（按长静音自动切成多段）
+      </label>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <div class="slider"><span class="hint">切片停顿阈值</span><input type="range" id="sliceThreshold" min="0.5" max="5" step="0.5" value="2"><span class="val" id="sliceThresholdV">2.0 s</span></div>
+          <div class="hint">超过该时长的静音视为话题断点，在此处切分；结果输出为多个片段的压缩包</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <span class="hint">输出画质</span>
+          <select id="quality" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px">
+            <option value="high" selected>高质量（CRF 18 / 192k 音频，文件大、画质近原片）</option>
+            <option value="medium">均衡（CRF 23 / 160k 音频，文件中等、画质可接受）</option>
+            <option value="fast">高速小文件（CRF 28 / 128k 音频，文件最小、画质有损）</option>
+          </select>
+          <div class="hint">原片是高码率（&gt;5000 kbps）素材时建议选高质量；低码率素材或要分享压缩包时可选手均衡/高速</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card hide" id="resultCard">
+    <div class="stats">
+      <div class="stat"><div class="k">原时长</div><div class="v" id="oDur">—</div></div>
+      <div class="stat"><div class="k">剪辑后</div><div class="v" id="cDur">—</div></div>
+      <div class="stat"><div class="k">省去</div><div class="v" id="saved">—</div></div>
+      <div class="stat"><div class="k">保留段数</div><div class="v" id="segN">—</div></div>
+    </div>
+    <div id="segTable"><table><thead><tr><th>#</th><th>起(s)</th><th>止(s)</th><th>时长(s)</th></tr></thead><tbody id="segBody"></tbody></table></div>
+    <div id="fillerBox" class="hide" style="margin-top:14px">
+      <div class="badge ok" id="fillerBadge">识别到 0 个语气词</div>
+      <div id="fillerTable" style="margin-top:8px"><table><thead><tr><th>语气词</th><th>起(s)</th><th>止(s)</th></tr></thead><tbody id="fillerBody"></tbody></table></div>
+    </div>
+    <div id="transcriptBox" class="hide" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+      <div class="badge ok" id="transcriptBadge">📝 已识别文案（口播稿）</div>
+      <div id="asrQuality" class="hide" style="font-size:13px;line-height:1.7;padding:8px 11px;border-radius:8px;margin-top:8px"></div>
+      <textarea id="transcriptText" readonly placeholder="启用语气词切除后分析，会自动识别视频文案…" style="width:100%;height:120px;margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:14px;line-height:1.7;resize:vertical;background:#fbfcfe"></textarea>
+      <div style="margin-top:8px">
+        <a id="dlTranscript" class="dl" download="文案.txt" style="background:var(--brand)">⬇️ 下载文案 (.txt)</a>
+      </div>
+    </div>
+    <a id="download" class="dl hide" download="kouchao_cut.mp4">⬇️ 下载剪辑结果 (kouchao_cut.mp4)</a>
+  </div>
+
+  <div class="card">
+    <label>运行日志</label>
+    <div id="log" class="log"></div>
+  </div>
+
+  <div class="card">
+    <label>关于本程序（便携版）</label>
+    <div class="hint" style="line-height:1.8">
+      本程序已把 <b>ffmpeg</b> 与 <b>whisper 语音识别（含 ggml-base.bin 模型）</b> 全部打包在内，<b>无需联网、无需安装</b>，拷到任意 Windows 电脑双击「口播剪辑器.exe」即可用，视频全程只在本机处理。
+      <br>• 去静音 / 长停顿：调用内置 ffmpeg.exe，本地完成。
+      <br>• 语气词切除（嗯/啊/那个…）：调用内置 whisper.cpp 本地识别，视频不出本机；分「安全级 / 语境级」两级，切点吸附到停顿边界，避免误伤。
+      <br>• 停顿压缩：长停顿可压成短间隙，保留自然呼吸感（可选）。
+      <br>• 自然切片：按长静音自动切成多段视频（可选）。
+      <br>• <b>字幕 & 文案输出</b>：启用「语气词切除」（即语音识别）后，分析时会同步识别视频文案；剪辑完成的结果除成品视频外，还会附带 <b>SRT / VTT 字幕文件</b> 与 <b>文案 (.txt)</b>（多段时为 zip 压缩包，单段时也是含字幕的 zip）。字幕时间戳已按剪辑后的时间轴重新对齐，被切掉的语气词/静音处不出现字幕。
+      <br>• 关闭启动窗口即退出程序。若杀毒软件误报，请允许运行（程序不含任何上传行为）。
+    </div>
+    <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
+      <label style="font-size:14px">识别不准 / 想识别粤语？换个模型即可</label>
+      <div class="hint" style="line-height:1.8">
+        内置的是 <code>ggml-base.bin</code>（6 档里第 2 小），够用于普通话去语气词，但<b>识别粤语会明显跑偏</b>，也更容易在长视频后半段「复读崩溃」。
+        <br>换模型方法：下载下面任一 <code>.bin</code>，放进本程序目录的 <code>whisper\models\</code>，<b>刷新页面即可</b>（程序会自动选档位最高的那个，无需删旧模型、无需重启）。
+        <br>• <b>粤语必须用 large-v3 系</b>：Whisper 的粤语是独立语言标记 <code>&lt;|yue|&gt;</code>，只存在于 large-v3 的词表里（词表 51866；其余模型都是 51865，没有粤语）。
+        <br>&nbsp;&nbsp;— <code>ggml-large-v3-turbo.bin</code>（约 1.6GB）← <b>最推荐</b>，支持粤语；CPU 上比 base 慢数倍，长视频需耐心等待（可放进本程序 <code>whisper\models\</code> 目录，程序会自动选用）
+        <br>&nbsp;&nbsp;— <code>ggml-large-v3.bin</code>（约 3.1GB）精度最高，但 CPU 上慢很多
+        <br>• 只做普通话、想省空间：<code>ggml-medium.bin</code>（约 1.5GB）或 <code>ggml-small.bin</code>（约 0.5GB）
+        <br>下载地址（Hugging Face 官方仓库）：<code>huggingface.co/ggerganov/whisper.cpp</code> → Files → 选对应文件名下载。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let SERVER = '';
+try { SERVER = localStorage.getItem('kcc_server') || ''; } catch(e){}
+function setServer(addr){
+  SERVER = addr.replace(/\/+$/, '');
+  try { localStorage.setItem('kcc_server', SERVER); } catch(e){}
+  location.reload();
+}
+function showConnBar(){
+  if(document.getElementById('connBar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'connBar';
+  bar.style.cssText = 'position:sticky;top:0;z-index:99;background:#fff3f3;border-bottom:2px solid #ff6b6b;color:#a11;padding:12px 16px;font-size:13px;line-height:1.7';
+  const msg = document.createElement('span');
+  msg.textContent = '⚠️ 无法连接剪辑服务器。请先双击本程序目录里的「口播剪辑器.exe」（或 start.bat）启动，稍候会自动打开本页面；若已启动请确认窗口未关闭。若端口不同，填地址后点应用：';
+  const inp = document.createElement('input');
+  inp.id = 'srvInput'; inp.value = 'http://127.0.0.1:8021';
+  inp.style.cssText = 'width:210px;padding:4px 6px;margin:0 6px;border:1px solid #f99;border-radius:6px';
+  const btn = document.createElement('button');
+  btn.textContent = '应用';
+  btn.style.cssText = 'padding:4px 12px;border:0;border-radius:6px;background:#ff6b6b;color:#fff;cursor:pointer';
+  btn.addEventListener('click', () => setServer(document.getElementById('srvInput').value));
+  bar.appendChild(msg); bar.appendChild(inp); bar.appendChild(btn);
+  document.body.insertBefore(bar, document.body.firstChild);
+}
+let pickedFile = null;
+let lastSegs = [];
+let lastTranscript = '';
+
+['thr','min','pad','minSeg','floorGap','sliceThreshold'].forEach(k=>{
+  const map={thr:['thrV',v=>v+' dB'],min:['minV',v=>(+v).toFixed(2)+' s'],pad:['padV',v=>(+v).toFixed(2)+' s'],minSeg:['minSegV',v=>(+v).toFixed(2)+' s'],floorGap:['floorGapV',v=>(+v).toFixed(2)+' s'],sliceThreshold:['sliceThresholdV',v=>(+v).toFixed(1)+' s']};
+  $(k).oninput=e=>{ const [el,fmt]=map[k]; $(el).textContent=fmt(e.target.value); };
+});
+
+function log(s){ const el=$('log'); el.textContent += s+"\n"; el.scrollTop=el.scrollHeight; }
+function setStage(t,c){ const e=$('stage'); e.textContent=t; e.className='badge'+(c?(' '+c):''); }
+
+$('drop').onclick=()=>$('file').click();
+$('file').onchange=e=>{ if(e.target.files[0]){ pickedFile=e.target.files[0]; $('path').value=''; log('已选择文件：'+pickedFile.name); } };
+['dragover','dragenter'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='var(--brand)';}));
+['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='var(--line)';}));
+$('drop').addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f){ pickedFile=f; $('path').value=''; log('已拖入：'+f.name);} });
+$('path').oninput=()=>{ pickedFile=null; };
+
+async function analyze(){
+  if(!pickedFile && !$('path').value.trim()){ log('请先选视频或填写本地路径'); return; }
+  $('analyze').disabled=true; setStage('分析中…','warn');
+  try{
+    let body, headers={};
+    if(pickedFile){
+      body=await pickedFile.arrayBuffer();
+      headers={'Content-Type':'application/octet-stream','X-Params':JSON.stringify(params())};
+    } else {
+      body=JSON.stringify({path:$('path').value.trim(), ...params()});
+      headers={'Content-Type':'application/json'};
+    }
+    const r=await fetch(SERVER + '/api/analyze',{method:'POST',body,headers});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'分析失败');
+    lastSegs=j.segments;
+    renderResult(j);
+    setStage('可剪辑','ok'); $('cut').disabled=false;
+  }catch(err){ log('❌ '+err.message); setStage('分析失败'); }
+  finally{ $('analyze').disabled=false; }
+}
+
+function params(){ return {thr:+$('thr').value, min:+$('min').value, pad:+$('pad').value, minSeg:+$('minSeg').value,
+  filler:$('filler').checked, lang:$('lang').value, gpu:$('gpuMode').value,
+  fillerWords:$('fillerWords').value, fillerWords2:$('fillerWords2').value,
+  pauseMode:$('pauseMode').value, floorGap:+$('floorGap').value,
+  sliceMode:$('sliceMode').checked, sliceThreshold:+$('sliceThreshold').value,
+  quality:$('quality').value }; }
+
+function fmt(s){ s=Math.max(0,s); const m=Math.floor(s/60), ss=(s%60); return (m>0? m+':'+ss.toFixed(2).padStart(5,'0') : ss.toFixed(2)); }
+
+function renderResult(j){
+  $('resultCard').classList.remove('hide');
+  $('oDur').textContent=fmt(j.origDur);
+  const cut=j.segments.reduce((a,[s,e])=>a+(e-s),0);
+  $('cDur').textContent=fmt(cut);
+  $('saved').textContent=j.origDur? Math.round((1-cut/j.origDur)*100)+'%':'—';
+  $('segN').textContent=j.segments.length;
+  const tb=$('segBody'); tb.innerHTML='';
+  j.segments.slice(0,200).forEach(([s,e],k)=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${k+1}</td><td>${s.toFixed(2)}</td><td>${e.toFixed(2)}</td><td>${(e-s).toFixed(2)}</td>`; tb.appendChild(tr); });
+  // 语气词
+  if(j.filler && j.fillers){
+    $('fillerBox').classList.remove('hide');
+    $('fillerBadge').textContent='识别到 '+j.fillerCount+' 个语气词（将被切除）';
+    const fb=$('fillerBody'); fb.innerHTML='';
+    j.fillers.slice(0,200).forEach(({word,start,end})=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${word}</td><td>${start.toFixed(2)}</td><td>${end.toFixed(2)}</td>`; fb.appendChild(tr); });
+  } else {
+    $('fillerBox').classList.add('hide');
+  }
+  // 已识别文案（仅启用语气词切除时有）
+  if(j.transcript && j.transcript.trim()){
+    $('transcriptBox').classList.remove('hide');
+    $('transcriptText').value=j.transcript.trim();
+    lastTranscript=j.transcript.trim();
+  } else {
+    $('transcriptBox').classList.add('hide');
+    lastTranscript='';
+  }
+  // 识别质量诊断：复读率 / 语言降级 / 模型档位
+  const d=j.asrDiag||{}; const q=$('asrQuality'); const tips=[];
+  if(d.langNote) tips.push(d.langNote);
+  const rr=+(d.repRatio||0);
+  if(rr>=0.25) tips.push('检测到严重复读（复读率 '+Math.round(rr*100)+'%，已自动清理 '+(d.repDropped||0)+' 个重复词）。这是模型能力不足导致的解码崩溃，换更大的模型可根治。');
+  else if(rr>0.08) tips.push('检测到轻微复读（复读率 '+Math.round(rr*100)+'%），已自动清理。');
+  const mo=d.model||{};
+  if(mo.weakForCJK) tips.push('当前用的是 '+(mo.tier||'?')+' 档模型，对中文/粤语口播偏弱，建议换 ggml-medium.bin 或 ggml-large-v3-turbo.bin。');
+  if(tips.length){
+    q.classList.remove('hide');
+    const bad=rr>=0.25;
+    q.style.background=bad?'#fef2f2':'#fff7ed';
+    q.style.border='1px solid '+(bad?'#fecaca':'#fed7aa');
+    q.style.color=bad?'#991b1b':'#9a3412';
+    q.innerHTML='⚠️ '+tips.join('<br>⚠️ ');
+  } else { q.classList.add('hide'); }
+  let msg=`✅ 分析完成：保留 ${j.segments.length} 段，预计时长 ${fmt(cut)}，省去 ${$('saved').textContent}`;
+  if(j.filler) msg+=`；语气词 ${j.fillerCount||0} 个`;
+  if(lastTranscript) msg+=`；已识别文案 ${lastTranscript.length} 字`;
+  if(j.sceneCount && j.sceneCount>1) msg+=`；将切成 ${j.sceneCount} 段`;
+  log(msg);
+}
+
+$('analyze').onclick=analyze;
+
+// 文案 .txt 下载（基于分析时识别到的 transcript）
+$('dlTranscript').onclick=e=>{
+  if(!lastTranscript){ e.preventDefault(); log('暂无可下载的文案'); return; }
+  const blob=new Blob([lastTranscript],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  $('dlTranscript').href=url;
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  log('⬇️ 已生成文案 .txt 下载。');
+};
+
+$('cut').onclick=async()=>{
+  if(!lastSegs.length){ log('没有可保留片段'); return; }
+  $('cut').disabled=true; setStage('剪辑中…','warn');
+  try{
+    let body, headers={};
+    if(pickedFile){
+      body=await pickedFile.arrayBuffer();
+      headers={'Content-Type':'application/octet-stream','X-Params':JSON.stringify({...params(),segments:lastSegs})};
+    } else {
+      body=JSON.stringify({path:$('path').value.trim(), ...params(), segments:lastSegs});
+      headers={'Content-Type':'application/json'};
+    }
+    const r=await fetch(SERVER + '/api/cut',{method:'POST',body,headers});
+    if(!r.ok){ const t=await r.text(); throw new Error(t||'剪辑失败'); }
+    const ct=r.headers.get('Content-Type')||'';
+    const isZip=ct.indexOf('zip')>=0;
+    const sub=$('filler').checked;   // 启用语音识别 => 结果含字幕 + 文案
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=$('download'); a.href=url; a.classList.remove('hide');
+    a.download=isZip?'kouchao_cut.zip':'kouchao_cut.mp4';
+    if(isZip && sub){
+      a.textContent='⬇️ 下载结果（成品视频 + 字幕 SRT/VTT + 文案 txt）';
+    } else if(isZip){
+      a.textContent='⬇️ 下载剪辑结果（多段 zip）';
+    } else {
+      a.textContent='⬇️ 下载剪辑结果 (kouchao_cut.mp4)';
+    }
+    let doneMsg;
+    if(isZip && sub){
+      doneMsg='✅ 剪辑完成！压缩包内含：成品视频 + 字幕文件(.srt/.vtt) + 文案(.txt)。点击上方链接下载。';
+    } else if(isZip){
+      doneMsg='✅ 剪辑完成！已按长静音切成多段，点击下载 zip。';
+    } else {
+      doneMsg='✅ 剪辑完成！点击上方链接下载。';
+    }
+    log(doneMsg);
+    setStage('完成','ok');
+  }catch(err){ log('❌ '+err.message); setStage('剪辑失败'); }
+  finally{ $('cut').disabled=false; }
+};
+
+// 启动检测 ffmpeg 与 whisper
+(async()=>{
+  try{
+    const r=await fetch(SERVER + '/api/ffmpeg'); const j=await r.json();
+    const el=$('ffStatus');
+    if(j.ok){ el.className='ffstatus ok'; el.textContent='✅ ffmpeg 就绪：'+j.bin; }
+    else { el.className='ffstatus bad'; el.textContent='❌ 未找到 ffmpeg：'+j.error; }
+  }catch(e){ $('ffStatus').textContent='无法连接服务器'; showConnBar(); }
+  try{
+    const r=await fetch(SERVER + '/api/asr-status'); const j=await r.json();
+    const el=$('asrStatus');
+    if(j.whisper && j.model){
+      const bits=[];
+      if(j.tier) bits.push('通用模型 '+j.tier+' 档');
+      if(j.sizeMB) bits.push(j.sizeMB+'MB');
+      let text='✅ 语音识别就绪：'+j.modelName+(bits.length?'（'+bits.join(' / ')+'）':'');
+    if(j.yueSupported) text+='；粤语模型：'+j.yueModelName+'（'+(j.yueTier||'')+' 档，已开启粤语识别）';
+    if(j.gpuAvailable) text+='；GPU 加速：'+(j.gpuBackend||'')+'（CPU+GPU 模式可用）';
+    else text+='；当前 whisper 为纯 CPU 构建，CPU+GPU 会回退到 CPU';
+    el.className='ffstatus ok';
+      el.textContent=text;
+      // 仅在「完全没有粤语模型」时才提示换模型；有独立的粤语大模型则不报警
+    const warn=[];
+    if(!j.yueSupported) warn.push('选「粤语」需要含粤语 token 的模型（ggml-large-v3-turbo.bin 或 ggml-large-v3.bin）。当前没有，选粤语会降级为普通话解码。');
+    if(!j.gpuAvailable) warn.push('当前内置 whisper 是纯 CPU 版，「CPU+GPU」选项会回退到 CPU；要真正用显卡加速，需放入支持 GPU 的 whisper-cli.exe（Vulkan/CUDA 后端）。');
+      const mw=$('modelWarn');
+      if(warn.length){ mw.classList.remove('hide'); mw.innerHTML='⚠️ '+warn.join('<br>⚠️ '); }
+      else { mw.classList.add('hide'); }
+    } else if(j.whisper && !j.model){
+      el.className='ffstatus bad'; el.textContent='⚠️ 找到 whisper 但缺模型，请把 ggml-*.bin 放到本程序目录下的 whisper\\models\\';
+    } else {
+      el.className='ffstatus bad'; el.textContent='❌ 未找到 whisper：需下载 whisper-cli.exe 与模型（见下方说明）';
+    }
+  }catch(e){ $('asrStatus').textContent='无法连接服务器'; showConnBar(); }
+})();
+</script>
+</body>
+</html>

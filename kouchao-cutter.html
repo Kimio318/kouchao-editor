@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>口播自动剪辑器 · 去静音/卡顿</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --card:#ffffff; --line:#e6e9f0; --txt:#1f2430;
+    --sub:#6b7280; --brand:#4f46e5; --brand2:#6366f1; --ok:#10b981;
+    --warn:#f59e0b; --err:#ef4444; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--txt);line-height:1.6}
+  .wrap{max-width:760px;margin:0 auto;padding:28px 18px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--sub);font-size:14px;margin:0 0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+        padding:18px;margin-bottom:16px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .drop{border:2px dashed var(--line);border-radius:var(--radius);padding:26px;text-align:center;
+        cursor:pointer;transition:.15s;background:#fafbff}
+  .drop:hover{border-color:var(--brand);background:#f3f4ff}
+  .drop b{color:var(--brand)}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:12px 0}
+  .ctrl{flex:1;min-width:200px}
+  label{display:block;font-size:13px;color:var(--sub);margin-bottom:6px}
+  label b{color:var(--txt)}
+  input[type=range]{width:100%;accent-color:var(--brand)}
+  .val{font-variant-numeric:tabular-nums;color:var(--brand);font-weight:600}
+  button{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:11px 18px;
+         font-size:15px;font-weight:600;cursor:pointer;transition:.15s}
+  button:hover{background:var(--brand2)}
+  button:disabled{background:#c7cad6;cursor:not-allowed}
+  .ghost{background:#eef0f6;color:var(--txt)}
+  .ghost:hover{background:#e2e5f0}
+  .stat{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  .pill{background:#f1f3f9;border-radius:10px;padding:8px 12px;font-size:13px}
+  .pill b{display:block;font-size:18px;color:var(--brand)}
+  #log{background:#0f1422;color:#cdd6f4;border-radius:10px;padding:12px;font-size:12px;
+       font-family:ui-monospace,Menlo,Consolas,monospace;max-height:180px;overflow:auto;white-space:pre-wrap}
+  .hide{display:none}
+  .badge{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;background:#eef0f6;color:var(--sub)}
+  .ok{background:#e7f8f0;color:var(--ok)} .warn{background:#fef3e2;color:var(--warn)}
+  a.dl{color:var(--brand);font-weight:600;text-decoration:none}
+  .hint{font-size:12px;color:var(--sub);margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎬 口播自动剪辑器</h1>
+  <p class="sub">自动去除静音段、长停顿与卡顿 —— 本地浏览器处理，不上传任何数据。
+     <span class="badge" id="ffStatus">ffmpeg.wasm 未加载</span></p>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <p style="margin:0 0 6px">📁 点击或拖拽口播视频到这里</p>
+      <p class="hint">支持 mp4 / mov / webm / mkv 等（建议 ≤ 5 分钟，处理更快）</p>
+      <input type="file" id="file" accept="video/*" class="hide" />
+    </div>
+    <div id="fileInfo" class="hide">
+      <div class="stat">
+        <div class="pill">已选文件<b id="fName">—</b></div>
+        <div class="pill">时长<b id="fDur">—</b></div>
+        <div class="pill">大小<b id="fSize">—</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="ctrl">
+        <label>静音阈值（越低越灵敏）<b class="val" id="thrV">-40 dB</b></label>
+        <input type="range" id="thr" min="-60" max="-20" step="1" value="-40" />
+      </div>
+      <div class="ctrl">
+        <label>超过该时长才剪掉（停顿/静音）<b class="val" id="minV">0.40 s</b></label>
+        <input type="range" id="min" min="0.1" max="2" step="0.05" value="0.4" />
+      </div>
+    </div>
+    <div class="row">
+      <div class="ctrl">
+        <label>片段边缘留白（避免切掉字头）<b class="val" id="padV">0.03 s</b></label>
+        <input type="range" id="pad" min="0" max="0.2" step="0.01" value="0.03" />
+      </div>
+      <div class="ctrl">
+        <label>最短保留片段（过滤杂音）<b class="val" id="minSegV">0.15 s</b></label>
+        <input type="range" id="minSeg" min="0.05" max="1" step="0.05" value="0.15" />
+      </div>
+    </div>
+    <div class="row">
+      <button id="start" disabled>① 先加载引擎并分析</button>
+      <button id="cut" class="ghost" disabled>② 开始剪辑</button>
+      <span id="stage" class="badge">待加载</span>
+    </div>
+    <div class="hint">第①步会加载 ffmpeg.wasm（约 30MB，走你自己的网络，首次稍慢）；分析完成后看下面的保留区间，再点②剪辑。</div>
+  </div>
+
+  <div class="card hide" id="resultCard">
+    <div class="stat">
+      <div class="pill">原始时长<b id="oDur">—</b></div>
+      <div class="pill">剪辑后<b id="cDur">—</b></div>
+      <div class="pill">节省<b id="saved">—</b></div>
+      <div class="pill">保留段数<b id="segN">—</b></div>
+    </div>
+    <div style="margin-top:12px"><a id="download" class="dl hide" download="kouchao_cut.mp4">⬇️ 下载剪辑结果 (kouchao_cut.mp4)</a></div>
+    <div id="segTable" class="hide"><table><thead><tr><th>#</th><th>开始</th><th>结束</th><th>时长</th></tr></thead><tbody id="segBody"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <label style="font-size:13px;color:var(--sub)">运行日志</label>
+    <div id="log">等待操作…</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const log = (m)=>{ const el=$('log'); el.textContent += m + "\n"; el.scrollTop = el.scrollHeight; };
+const fmt = s => { s=Math.max(0,s); const m=Math.floor(s/60), ss=(s%60); return (m>0?m+"分":"")+ss.toFixed(2)+"秒"; };
+
+let ffmpeg=null, loaded=false, intervals=[], videoFile=null, audioBuf=null, origDur=0;
+
+// ---- UI bindings ----
+$('thr').oninput = e=> $('thrV').textContent = e.target.value+" dB";
+$('min').oninput = e=> $('minV').textContent = (+e.target.value).toFixed(2)+" s";
+$('pad').oninput = e=> $('padV').textContent = (+e.target.value).toFixed(2)+" s";
+$('minSeg').oninput = e=> $('minSegV').textContent = (+e.target.value).toFixed(2)+" s";
+
+$('drop').onclick = ()=> $('file').click();
+$('file').onchange = e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+['dragover','dragenter'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='var(--brand)';}));
+['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').style.borderColor='var(--line)';}));
+$('drop').addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+
+async function handleFile(f){
+  videoFile=f;
+  $('fileInfo').classList.remove('hide');
+  $('fName').textContent = f.name.length>22? f.name.slice(0,20)+"…" : f.name;
+  $('fSize').textContent = (f.size/1048576).toFixed(1)+" MB";
+  // 取时长
+  const url=URL.createObjectURL(f);
+  const v=document.createElement('video'); v.preload='metadata'; v.src=url;
+  await new Promise(res=>{ v.onloadedmetadata=()=>{ origDur=v.duration; res(); }; v.onerror=()=>{origDur=0;res();}; });
+  $('fDur').textContent = origDur? fmt(origDur):"—";
+  log("已选择：" + f.name + (origDur? ("，时长 "+fmt(origDur)) : ""));
+  $('start').disabled = false;
+}
+
+$('start').onclick = async ()=>{
+  $('start').disabled=true; $('stage').textContent="加载中…"; $('stage').className="badge warn";
+  if(!loaded) await loadFF();
+  await analyze();
+};
+
+$('cut').onclick = async ()=>{
+  if(!intervals.length){ log("没有需要保留的片段，请重新调整参数。"); return; }
+  await doCut();
+};
+
+async function loadFF(){
+  if(loaded) return;
+  log("正在加载 ffmpeg.wasm（首次约 30MB，请稍候）…");
+  ffmpeg = FFmpeg.createFFmpeg({
+    log:true,
+    corePath:'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+    progress:({ratio})=>{ if(ratio>=0 && ratio<=1) $('stage').textContent="剪辑中 "+Math.round(ratio*100)+"%"; }
+  });
+  ffmpeg.setLogger(({message})=>{ if(/frame=|speed=|time=/.test(message)) log("  "+message.slice(0,140)); });
+  try{
+    await ffmpeg.load();
+    loaded=true;
+    $('ffStatus').textContent="ffmpeg.wasm 已就绪"; $('ffStatus').className="badge ok";
+    log("✅ ffmpeg.wasm 加载完成");
+  }catch(err){
+    log("❌ 加载失败："+err.message+"\n可能是网络无法访问 unpkg，请换用本机 Chrome/Edge 打开此文件，或检查网络。");
+    $('stage').textContent="加载失败"; $('stage').className="badge";
+    $('start').disabled=false;
+    throw err;
+  }
+}
+
+// ---- 静音检测（Web Audio） ----
+async function analyze(){
+  log("🔍 分析音频，检测静音/停顿…");
+  const arr = await videoFile.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  const buf = await ac.decodeAudioData(arr.slice(0));
+  audioBuf = buf;
+  const sr = buf.sampleRate;
+  const ch = buf.numberOfChannels;
+  const len = buf.length;
+  // 混为单声道
+  const mono = new Float32Array(len);
+  for(let c=0;c<ch;c++){ const d=buf.getChannelData(c); for(let i=0;i<len;i++) mono[i]+=d[i]/ch; }
+
+  const frame = Math.max(1, Math.round(sr*0.02)); // 20ms
+  const thrDb = +$('thr').value;
+  const thrLin = Math.pow(10, thrDb/20);
+  const minSil = +$('min').value;
+  const pad = +$('pad').value;
+  const minSeg = +$('minSeg').value;
+
+  const frames = Math.ceil(len/frame);
+  const rms = new Float32Array(frames);
+  for(let f=0; f<frames; f++){
+    let s=0, n=0;
+    const start=f*frame, end=Math.min(start+frame,len);
+    for(let i=start;i<end;i++){ const v=mono[i]; s+=v*v; n++; }
+    rms[f] = n? Math.sqrt(s/n) : 0;
+  }
+  const silent = new Uint8Array(frames);
+  for(let f=0; f<frames; f++) silent[f] = rms[f] < thrLin ? 1 : 0;
+
+  // 找静音连续段，超过 minSil 的作为剪切点
+  const minSilFrames = Math.round(minSil/0.02);
+  const cuts=[]; // [start,end] 静音区间（秒）
+  let i=0;
+  while(i<frames){
+    if(silent[i]){
+      let j=i; while(j<frames && silent[j]) j++;
+      const durFrames=j-i;
+      if(durFrames>=minSilFrames){ cuts.push([i*0.02, j*0.02]); }
+      i=j;
+    } else i++;
+  }
+  // 保留区间 = 全长减去静音段
+  let segs=[]; let cursor=0;
+  for(const [s,e] of cuts){ if(s>cursor) segs.push([cursor,s]); cursor=e; }
+  if(cursor<origDur) segs.push([cursor,origDur]);
+
+  // 边缘留白 + 过滤过短片段 + 合并相邻
+  segs = segs.map(([s,e])=>[Math.max(0,s-pad), Math.min(origDur,e+pad)]);
+  segs = segs.filter(([s,e])=> (e-s) >= minSeg);
+  // 合并间隔 < pad*2 的相邻段（避免抖动）
+  const merged=[];
+  for(const seg of segs){
+    if(merged.length && seg[0]-merged[merged.length-1][1] < pad*2){ merged[merged.length-1][1]=seg[1]; }
+    else merged.push(seg);
+  }
+  intervals = merged;
+  showResult(merged, origDur);
+  log(`✅ 分析完成：保留 ${merged.length} 段，预计时长 ${fmt(merged.reduce((a,[s,e])=>a+(e-s),0))}`);
+  $('stage').textContent="可剪辑"; $('stage').className="badge ok";
+  $('cut').disabled=false;
+}
+
+function showResult(segs, total){
+  const cut = segs.reduce((a,[s,e])=>a+(e-s),0);
+  $('resultCard').classList.remove('hide');
+  $('oDur').textContent = fmt(total);
+  $('cDur').textContent = fmt(cut);
+  $('saved').textContent = total? Math.round((1-cut/total)*100)+"%" : "—";
+  $('segN').textContent = segs.length;
+  const tb=$('segBody'); tb.innerHTML="";
+  segs.slice(0,200).forEach(([s,e],k)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${k+1}</td><td>${s.toFixed(2)}</td><td>${e.toFixed(2)}</td><td>${(e-s).toFixed(2)}</td>`;
+    tb.appendChild(tr);
+  });
+  $('segTable').classList.remove('hide');
+}
+
+// ---- 剪辑（单条 filter_complex） ----
+async function doCut(){
+  $('cut').disabled=true; $('stage').textContent="剪辑中 0%"; $('stage').className="badge warn";
+  log("✂️ 开始剪辑（ffmpeg 单遍处理）…");
+  const data = await videoFile.arrayBuffer();
+  ffmpeg.FS('writeFile','in.mp4', new Uint8Array(data));
+
+  const N=intervals.length;
+  const vParts=[], aParts=[];
+  intervals.forEach(([s,e],k)=>{
+    vParts.push(`[0:v]trim=${s.toFixed(3)}:${e.toFixed(3)},setpts=PTS-STARTPTS[v${k}]`);
+    aParts.push(`[0:a]atrim=${s.toFixed(3)}:${e.toFixed(3)},asetpts=PTS-STARTPTS[a${k}]`);
+  });
+  const vConcat = intervals.map((_,k)=>`[v${k}]`).join('') + `concat=n=${N}:v=1:a=0[outv]`;
+  const aConcat = intervals.map((_,k)=>`[a${k}]`).join('') + `concat=n=${N}:v=0:a=1[outa]`;
+  const fc = vParts.join(';') + ';' + aParts.join(';') + ';' + vConcat + ';' + aConcat;
+
+  try{
+    await ffmpeg.run('-i','in.mp4','-filter_complex',fc,'-map','[outv]','-map','[outa]',
+                     '-c:v','libx264','-preset','veryfast','-crf','23','-c:a','aac','-y','out.mp4');
+    const out = ffmpeg.FS('readFile','out.mp4');
+    const blob = new Blob([out.buffer], {type:'video/mp4'});
+    const url = URL.createObjectURL(blob);
+    const a=$('download'); a.href=url; a.classList.remove('hide');
+    ffmpeg.FS('unlink','in.mp4'); ffmpeg.FS('unlink','out.mp4');
+    log("✅ 剪辑完成！点击上方链接下载。");
+    $('stage').textContent="完成"; $('stage').className="badge ok";
+  }catch(err){
+    log("❌ 剪辑失败："+err.message);
+    $('stage').textContent="失败"; $('stage').className="badge";
+    $('cut').disabled=false;
+  }
+}
+</script>
+</body>
+</html>
