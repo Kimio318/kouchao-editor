@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 """集成测试：单段/多段场景走完整 渲染+字幕+zip 流水线。"""
 import os, sys, zipfile, io
 os.environ["FFMPEG_BIN"] = r"C:\Users\admin\WorkBuddy\2026-08-18-14-57-43\KouchaoEditor\ffmpeg\ffmpeg.exe"

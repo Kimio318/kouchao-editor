@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 # 端到端验证：用构建好的便携 exe 跑 4 种场景，检查产出合法且符合预期
 import urllib.request, json, os, subprocess, zipfile, sys
 

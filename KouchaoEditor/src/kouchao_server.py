@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 # 口播自动剪辑器 —— 便携版后端（单文件，可被 PyInstaller 打成 exe）
 # 仅用 Python 标准库；视频全程本地处理，不上传任何服务器。
 # ffmpeg / whisper 均从本程序所在目录的相对子文件夹中查找，因此整包可复制到任意 Windows 电脑双击使用。

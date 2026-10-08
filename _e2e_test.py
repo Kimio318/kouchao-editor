@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 import urllib.request, json, sys
 
 BASE = "http://127.0.0.1:8021"

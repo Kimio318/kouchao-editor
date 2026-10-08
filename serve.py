@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 import http.server
 import socketserver
 import os

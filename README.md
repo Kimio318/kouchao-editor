@@ -146,6 +146,9 @@ pyinstaller KouchaoEditor/KouchaoEditor.spec
 - 后端零第三方依赖；语音识别默认仅 CPU（BLAS），支持切换到 GPU 构建。
 - 已知限制：GBK 系统下粤语 / 中文提示词经 argv 不安全，已用校正表兜底；纯 CPU 跑 large 模型 + 长视频耗时较长（超时兜底 2 小时），提速靠量化模型或 GPU 后端。
 
-## 许可
+## 许可与第三方组件
 
-本项目以 **MIT 许可证** 开源，详见 [LICENSE](./LICENSE)。
+- **本仓库自有源码**（Python 标准库实现 + 前端 HTML）以 **MIT 许可证** 发布，版权归 **Kimio318** 所有，详见 [LICENSE](./LICENSE)。每份源码文件顶部均含 `SPDX-License-Identifier: MIT` 声明。
+- **whisper.cpp / OpenAI Whisper 模型权重 / OpenBLAS / FFmpeg / PyInstaller** 均为**独立第三方组件**：仅运行时经子进程调用或构建期使用，其源码**不在本仓库内**（经 `.gitignore` 排除），与本仓库自有代码无派生关系。
+- 各第三方组件的许可证与分发时的义务，统一见 [THIRD-PARTY-NOTICES](./THIRD-PARTY-NOTICES.md)。
+- **重要**：将打包后的应用（含 `whisper-cli.exe` / `ffmpeg.exe` 等二进制）分发给他人时，须按 THIRD-PARTY-NOTICES 在发布包内附带相应许可证文本（打包配置已自动把 `LICENSE` 与 `THIRD-PARTY-NOTICES.md` 打进发布包）。

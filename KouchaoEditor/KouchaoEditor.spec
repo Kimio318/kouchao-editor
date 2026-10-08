@@ -1,11 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
+import os
+
+# 仓库根（KouchaoEditor/ 的上一级），用于把许可证文件打进发布包
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
 
 
 a = Analysis(
     ['src/kouchao_server.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        (os.path.join(_ROOT, "LICENSE"), "."),
+        (os.path.join(_ROOT, "THIRD-PARTY-NOTICES.md"), "."),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

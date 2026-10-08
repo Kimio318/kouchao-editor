@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 """字幕生成单元测试：验证 _build_cues 修复 + scene_subtitles 端到端。"""
 import os
 import sys

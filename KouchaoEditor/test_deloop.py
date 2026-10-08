@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 """复读清理 / 模型能力探测 单元测试。
 测试数据直接用用户实际遇到的粤语识别崩溃文本。
 """

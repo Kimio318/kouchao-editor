@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Kimio318
+# SPDX-License-Identifier: MIT
+# KouchaoEditor（口播剪辑器）—— 自有源码，采用 MIT 许可证（详见 LICENSE）。
+
 # 口播自动剪辑器 —— 本地原生版（调用本机 ffmpeg.exe + whisper.cpp 语音识别）
 # 仅用 Python 标准库；视频全程本地处理，不上传。
 import os, re, sys, json, shutil, glob, tempfile, subprocess, html
