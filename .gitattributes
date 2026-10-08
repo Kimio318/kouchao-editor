@@ -1,0 +1,27 @@
+# 统一换行：源码按 LF 入库，检出时按各平台默认处理
+* text=auto eol=lf
+
+# 明确按文本处理的源码
+*.py    text eol=lf
+*.html  text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.bat   text eol=crlf
+*.spec  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# 二进制仍按二进制处理，避免被文本规则误改
+*.bin   binary
+*.exe   binary
+*.dll   binary
+*.pyd   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.mp4   binary
+*.zip   binary
